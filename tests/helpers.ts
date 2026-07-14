@@ -11,15 +11,18 @@ export async function createTodo(
   page: Page,
   input: { title: string; priority?: 'high' | 'medium' | 'low'; dueDateLocal?: string }
 ): Promise<void> {
-  await page.getByLabel('Todo title').fill(input.title);
+  const titleInput = page.getByLabel('Todo title');
+  const prioritySelect = page.getByLabel('Priority', { exact: true });
+  const dueDateInput = page.getByLabel('Due date');
+  const addButton = page.getByRole('button', { name: 'Add' });
 
-  if (input.priority) {
-    await page.getByLabel('Priority', { exact: true }).selectOption(input.priority);
-  }
+  await expect(titleInput).toBeVisible();
+  await titleInput.fill(input.title);
+  await expect(titleInput).toHaveValue(input.title);
 
-  if (input.dueDateLocal) {
-    await page.getByLabel('Due date').fill(input.dueDateLocal);
-  }
+  await prioritySelect.selectOption(input.priority ?? 'medium');
+  await dueDateInput.fill(input.dueDateLocal ?? '');
 
-  await page.getByRole('button', { name: 'Add' }).click();
+  await expect(addButton).toBeEnabled();
+  await addButton.click();
 }
