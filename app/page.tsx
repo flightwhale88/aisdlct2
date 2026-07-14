@@ -1,7 +1,38 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Tag, Todo, Subtask, CreateTagInput, UpdateTagInput } from '@/lib/db';
+import type { Tag, Todo, Subtask, Priority, CreateTagInput, UpdateTagInput } from '@/lib/db';
+
+// ─── Priority helpers ─────────────────────────────────────────────────────────
+
+const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
+
+const PRIORITY_STYLES: Record<Priority, string> = {
+  high:   'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700',
+  medium: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-700',
+  low:    'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700',
+};
+
+const PRIORITY_LABELS: Record<Priority, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${PRIORITY_STYLES[priority]}`}>
+      {PRIORITY_LABELS[priority]}
+    </span>
+  );
+}
+
+function compareTodos(a: Todo, b: Todo): number {
+  const pd = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+  if (pd !== 0) return pd;
+  if (a.due_date && b.due_date) {
+    const dd = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+    if (dd !== 0) return dd;
+  } else if (a.due_date) return -1;
+  else if (b.due_date) return 1;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
 
 // ─── Progress helpers ─────────────────────────────────────────────────────────
 
@@ -356,8 +387,10 @@ export default function HomePage() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [newTitle, setNewTitle] = useState('');
+  const [newPriority, setNewPriority] = useState<Priority>('medium');
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
   const [filterTagId, setFilterTagId] = useState<number | null>(null);
+  const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [showManageTags, setShowManageTags] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -442,7 +475,7 @@ export default function HomePage() {
     const res = await fetch('/api/todos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newTitle.trim() }),
+      body: JSON.stringify({ title: newTitle.trim(), priority: newPriority }),
     });
 
     if (!res.ok) {
@@ -464,6 +497,7 @@ export default function HomePage() {
     );
 
     setNewTitle('');
+    setNewPriority('medium');
     setSelectedTagIds(new Set());
     await fetchData();
   };
@@ -495,9 +529,18 @@ export default function HomePage() {
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
-  const filteredTodos = filterTagId
-    ? todos.filter((todo) => todo.tags?.some((t) => t.id === filterTagId))
-    : todos;
+  // ── Filtering + sectioning ─────────────────────────────────────────────────
+  const now = new Date();
+
+  const visibleTodos = todos.filter((todo) => {
+    if (filterTagId && !todo.tags?.some((t) => t.id === filterTagId)) return false;
+    if (filterPriority !== 'all' && todo.priority !== filterPriority) return false;
+    return true;
+  });
+
+  const overdue  = visibleTodos.filter((t) => !t.completed && t.due_date && new Date(t.due_date) < now).sort(compareTodos);
+  const pending  = visibleTodos.filter((t) => !t.completed && !(t.due_date && new Date(t.due_date) < now)).sort(compareTodos);
+  const completed = visibleTodos.filter((t) => t.completed).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -530,6 +573,15 @@ export default function HomePage() {
             placeholder="New todo…"
             className="flex-1 border rounded-lg px-3 py-2 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
           />
+          <select
+            value={newPriority}
+            onChange={(e) => setNewPriority(e.target.value as Priority)}
+            className="border rounded-lg px-2 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+          >
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
           <button
             type="submit"
             disabled={!newTitle.trim()}
@@ -556,88 +608,115 @@ export default function HomePage() {
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </form>
 
-      {/* ── Tag filter bar ───────────────────────────────────────────────── */}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4 items-center">
-          <span className="text-sm text-gray-500 dark:text-gray-400">Filter:</span>
-          <button
-            onClick={() => setFilterTagId(null)}
-            className={`text-sm px-3 py-1 rounded-full border transition-colors ${
-              filterTagId === null
-                ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900 border-transparent'
-                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-400'
-            }`}
-          >
-            All Tags
-          </button>
-          {tags.map((tag) => (
-            <TagPill
-              key={tag.id}
-              tag={tag}
-              onFilterClick={() => setFilterTagId(filterTagId === tag.id ? null : tag.id)}
-              selected={filterTagId === tag.id}
-            />
-          ))}
-        </div>
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        <span className="text-sm text-gray-500 dark:text-gray-400">Filter:</span>
+
+        {/* Priority filter */}
+        <select
+          value={filterPriority}
+          onChange={(e) => setFilterPriority(e.target.value as Priority | 'all')}
+          className="text-sm border rounded-full px-3 py-1 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+        >
+          <option value="all">All Priorities</option>
+          <option value="high">High Priority</option>
+          <option value="medium">Medium Priority</option>
+          <option value="low">Low Priority</option>
+        </select>
+
+        {/* Tag filters */}
+        {tags.length > 0 && (
+          <>
+            <button
+              onClick={() => setFilterTagId(null)}
+              className={`text-sm px-3 py-1 rounded-full border transition-colors ${
+                filterTagId === null
+                  ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900 border-transparent'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-400'
+              }`}
+            >
+              All Tags
+            </button>
+            {tags.map((tag) => (
+              <TagPill
+                key={tag.id}
+                tag={tag}
+                onFilterClick={() => setFilterTagId(filterTagId === tag.id ? null : tag.id)}
+                selected={filterTagId === tag.id}
+              />
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* ── Todo sections ────────────────────────────────────────────────── */}
+      {overdue.length === 0 && pending.length === 0 && completed.length === 0 && (
+        <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+          No todos yet. Create one above!
+        </p>
       )}
 
-      {/* ── Todo list ────────────────────────────────────────────────────── */}
-      <ul className="space-y-2">
-        {filteredTodos.length === 0 && (
-          <li className="text-center text-gray-500 dark:text-gray-400 py-8">
-            {filterTagId ? 'No todos with this tag.' : 'No todos yet. Create one above!'}
-          </li>
-        )}
-        {filteredTodos.map((todo) => (
-          <li
-            key={todo.id}
-            className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-100 dark:border-gray-700"
-          >
-            <input
-              type="checkbox"
-              checked={todo.completed === 1}
-              onChange={() => handleToggleComplete(todo)}
-              className="mt-1 h-4 w-4 rounded border-gray-300 cursor-pointer"
-            />
-            <div className="flex-1 min-w-0">
-              <p
-                className={`text-gray-800 dark:text-white ${
-                  todo.completed ? 'line-through text-gray-400 dark:text-gray-500' : ''
-                }`}
-              >
-                {todo.title}
-              </p>
-              {/* Tag pills on todo card */}
-              {todo.tags && todo.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {todo.tags.map((tag) => (
-                    <TagPill
-                      key={tag.id}
-                      tag={tag}
-                      onFilterClick={() =>
-                        setFilterTagId(filterTagId === tag.id ? null : tag.id)
-                      }
+      {[
+        { label: 'Overdue', items: overdue, labelClass: 'text-red-600 dark:text-red-400' },
+        { label: 'Pending', items: pending, labelClass: 'text-gray-700 dark:text-gray-200' },
+        { label: 'Completed', items: completed, labelClass: 'text-gray-400 dark:text-gray-500' },
+      ].map(({ label, items, labelClass }) =>
+        items.length === 0 ? null : (
+          <section key={label} className="mb-6">
+            <h2 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${labelClass}`}>
+              {label} ({items.length})
+            </h2>
+            <ul className="space-y-2">
+              {items.map((todo) => (
+                <li
+                  key={todo.id}
+                  className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-100 dark:border-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={todo.completed === 1}
+                    onChange={() => handleToggleComplete(todo)}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 cursor-pointer"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`text-gray-800 dark:text-white ${todo.completed ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}>
+                        {todo.title}
+                      </p>
+                      <PriorityBadge priority={todo.priority} />
+                    </div>
+                    {/* Tag pills */}
+                    {todo.tags && todo.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {todo.tags.map((tag) => (
+                          <TagPill
+                            key={tag.id}
+                            tag={tag}
+                            onFilterClick={() => setFilterTagId(filterTagId === tag.id ? null : tag.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {/* Subtasks */}
+                    <SubtaskList
+                      todoId={todo.id}
+                      subtasks={todo.subtasks ?? []}
+                      onChange={fetchData}
                     />
-                  ))}
-                </div>
-              )}
-              {/* Subtasks */}
-              <SubtaskList
-                todoId={todo.id}
-                subtasks={todo.subtasks ?? []}
-                onChange={fetchData}
-              />
-            </div>
-            <button
-              onClick={() => handleDeleteTodo(todo.id)}
-              className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 text-lg leading-none"
-              aria-label="Delete todo"
-            >
-              ×
-            </button>
-          </li>
-        ))}
-      </ul>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteTodo(todo.id)}
+                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 text-lg leading-none"
+                    aria-label="Delete todo"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      )}
 
       {/* ── Manage Tags modal ────────────────────────────────────────────── */}
       {showManageTags && (

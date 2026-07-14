@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { todoDB } from '@/lib/db';
+import { todoDB, validatePriority } from '@/lib/db';
 
 // GET /api/todos/[id]
 export async function GET(
@@ -30,6 +30,15 @@ export async function PUT(
 
   const { id } = await params;
   const body = await request.json();
+
+  if (body.priority !== undefined) {
+    try {
+      body.priority = validatePriority(body.priority);
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    }
+  }
+
   const updated = todoDB.update(parseInt(id, 10), session.userId, body);
   if (!updated) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
   return NextResponse.json(updated);

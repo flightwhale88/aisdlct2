@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { todoDB } from '@/lib/db';
+import { todoDB, validatePriority } from '@/lib/db';
 
 // GET /api/todos — list all todos for the authenticated user
 export async function GET() {
@@ -33,12 +33,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Title is required' }, { status: 400 });
   }
 
+  let validatedPriority;
+  try {
+    validatedPriority = validatePriority(priority);
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+  }
+
   const todo = todoDB.create(session.userId, {
     title: title.trim(),
-    priority: (['high', 'medium', 'low'].includes(priority ?? '') ? priority : 'medium') as
-      | 'high'
-      | 'medium'
-      | 'low',
+    priority: validatedPriority,
     due_date: due_date ?? null,
     recurrence: (['daily', 'weekly', 'monthly', 'yearly'].includes(recurrence ?? '')
       ? recurrence
