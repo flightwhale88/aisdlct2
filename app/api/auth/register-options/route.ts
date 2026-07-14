@@ -7,7 +7,6 @@ import { userDB } from '@/lib/db';
 
 const RP_ID = process.env.RP_ID || 'localhost';
 const RP_NAME = process.env.RP_NAME || 'Todo App';
-const ORIGIN = process.env.RP_ORIGIN || 'http://localhost:3000';
 
 export async function POST(request: NextRequest) {
   try {

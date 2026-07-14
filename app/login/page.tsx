@@ -8,7 +8,6 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
   // Check if already authenticated
@@ -51,11 +50,12 @@ export default function LoginPage() {
       let attestation;
       try {
         attestation = await startRegistration(options);
-      } catch (err: any) {
-        if (err.name === 'NotAllowedError') {
+      } catch (err: unknown) {
+        const error = err as Error & { name: string };
+        if (error.name === 'NotAllowedError') {
           setError('Registration cancelled');
         } else {
-          setError('Biometric/security key registration failed: ' + err.message);
+          setError('Biometric/security key registration failed: ' + error.message);
         }
         setIsLoading(false);
         return;
@@ -77,8 +77,9 @@ export default function LoginPage() {
 
       // Success - redirect to home
       router.push('/');
-    } catch (err: any) {
-      setError('An unexpected error occurred: ' + err.message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setError('An unexpected error occurred: ' + error.message);
       setIsLoading(false);
     }
   }
@@ -108,11 +109,12 @@ export default function LoginPage() {
       let assertion;
       try {
         assertion = await startAuthentication(options);
-      } catch (err: any) {
-        if (err.name === 'NotAllowedError') {
+      } catch (err: unknown) {
+        const error = err as Error & { name: string };
+        if (error.name === 'NotAllowedError') {
           setError('Authentication cancelled');
         } else {
-          setError('Biometric/security key authentication failed: ' + err.message);
+          setError('Biometric/security key authentication failed: ' + error.message);
         }
         setIsLoading(false);
         return;
@@ -134,8 +136,9 @@ export default function LoginPage() {
 
       // Success - redirect to home
       router.push('/');
-    } catch (err: any) {
-      setError('An unexpected error occurred: ' + err.message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setError('An unexpected error occurred: ' + error.message);
       setIsLoading(false);
     }
   }
@@ -172,14 +175,14 @@ export default function LoginPage() {
               disabled={isLoading || !username}
               className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
             >
-              {isLoading && isRegistering ? 'Registering...' : 'Register'}
+              {isLoading ? 'Loading...' : 'Register'}
             </button>
             <button
               onClick={handleLogin}
               disabled={isLoading || !username}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
             >
-              {isLoading && !isRegistering ? 'Logging in...' : 'Login'}
+              {isLoading ? 'Loading...' : 'Login'}
             </button>
           </div>
         </div>

@@ -696,7 +696,6 @@ export const holidayDB = {
 
   findByMonth(year: number, month: number): Holiday[] {
     // Include a few days padding for leading/trailing grid cells
-    const start = `${year}-${String(month).padStart(2, '0')}-01`;
     const padded = new Date(Date.UTC(year, month, 10)); // next month + 10 days
     const end = padded.toISOString().slice(0, 10);
     return db

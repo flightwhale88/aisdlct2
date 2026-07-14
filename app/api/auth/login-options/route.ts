@@ -8,10 +8,6 @@ import { userDB, authenticatorDB } from '@/lib/db';
 const RP_ID = process.env.RP_ID || 'localhost';
 
 // Base64URL encoding/decoding helpers
-function bufferToBase64url(buffer: Buffer | Uint8Array): string {
-  return Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
 function base64urlToBuffer(str: string): Buffer {
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
   while (base64.length % 4) {

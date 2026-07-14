@@ -9,10 +9,6 @@ const RP_ID = process.env.RP_ID || 'localhost';
 const ORIGIN = process.env.RP_ORIGIN || 'http://localhost:3000';
 
 // Base64URL encoding/decoding helpers
-function bufferToBase64url(buffer: Buffer | Uint8Array): string {
-  return Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
 function base64urlToBuffer(str: string): Buffer {
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
   while (base64.length % 4) {

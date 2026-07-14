@@ -13,14 +13,6 @@ function bufferToBase64url(buffer: Buffer | Uint8Array): string {
   return Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-function base64urlToBuffer(str: string): Buffer {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (base64.length % 4) {
-    base64 += '=';
-  }
-  return Buffer.from(base64, 'base64');
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { username, response } = await request.json();
