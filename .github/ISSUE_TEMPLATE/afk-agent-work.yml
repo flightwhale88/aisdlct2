@@ -1,0 +1,111 @@
+name: AFK Agent Work
+description: Assign a tightly scoped issue to the planner -> implementer -> reviewer loop.
+title: "[AFK]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when the issue is intended for the AFK agent workflow. The issue is the main control point before the agents start.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or goal
+      description: What should change, and why?
+      placeholder: Users need to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: List observable outcomes the reviewer can verify.
+      placeholder: |
+        - [ ] GET /tasks supports...
+        - [ ] Invalid input returns...
+    validations:
+      required: true
+
+  - type: textarea
+    id: api-behavior
+    attributes:
+      label: Expected API behavior
+      description: Include routes, status codes, request bodies, and response bodies when relevant.
+      placeholder: |
+        Route:
+        Success:
+        Error cases:
+    validations:
+      required: false
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What must the agents avoid changing?
+      placeholder: |
+        - No database
+        - No authentication
+        - No changes to existing response shapes
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type-edits
+    attributes:
+      label: May agents edit src/types/task.ts?
+      description: AGENTS.md forbids this unless explicitly required.
+      options:
+        - "No"
+        - "Yes, this issue requires it"
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dependencies
+    attributes:
+      label: May agents add dependencies?
+      description: AGENTS.md requires approval before adding dependencies.
+      options:
+        - "No"
+        - "Yes, but stop for human approval before installing"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: docs-impact
+    attributes:
+      label: Documentation impact
+      description: State whether docs/API.md or docs/LABS.md should change.
+      placeholder: |
+        - docs/API.md:
+        - docs/LABS.md:
+    validations:
+      required: true
+
+  - type: textarea
+    id: test-expectations
+    attributes:
+      label: Test expectations
+      description: Mention important happy paths, edge cases, and regression cases.
+      placeholder: |
+        - Happy path:
+        - Invalid input:
+        - Missing resource:
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Agent readiness checklist
+      options:
+        - label: The issue is small enough for one PR.
+          required: true
+        - label: Acceptance criteria are testable without asking follow-up questions.
+          required: true
+        - label: Any API contract changes are described above.
+          required: true

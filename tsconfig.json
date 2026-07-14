@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["app/**/*", "lib/**/*", "src/**/*", "tests/**/*", "next.config.ts", "playwright.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}
