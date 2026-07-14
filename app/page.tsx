@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Tag, Todo, Subtask, Priority, CreateTagInput, UpdateTagInput } from '@/lib/db';
+import type { Tag, Todo, Subtask, Priority, Template, CreateTagInput, UpdateTagInput } from '@/lib/db';
 
 // ─── Priority helpers ─────────────────────────────────────────────────────────
 
@@ -187,6 +187,92 @@ function TagPill({ tag, selected = false, onClick, onFilterClick }: TagPillProps
       {selected && <span aria-hidden>✓</span>}
       <span className="truncate max-w-[10rem]">{tag.name}</span>
     </button>
+  );
+}
+
+// ─── Template UI components ───────────────────────────────────────────────────
+
+function SaveTemplateModal({ title, priority, onClose, onSaved }: {
+  title: string;
+  priority: Priority;
+  onClose: () => void;
+  onSaved: (t: Template) => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    setError('');
+    const res = await fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description: description || undefined, category: category || undefined, title_template: title, priority }),
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      setError(d.error ?? 'Failed to save template');
+      return;
+    }
+    onSaved(await res.json());
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-sm shadow-xl space-y-3">
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Save as Template</h2>
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name *" className="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" rows={2} className="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+        <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category: Work, Personal, Finance…" className="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="text-sm text-gray-500 dark:text-gray-400">Cancel</button>
+          <button onClick={handleSave} disabled={!name.trim()} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded px-4 py-1.5 text-sm">Save Template</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TemplateManagerModal({ templates, onClose, onUse, onDelete }: {
+  templates: Template[];
+  onClose: () => void;
+  onUse: (id: number) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-lg shadow-xl">
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">📋 Templates</h2>
+        {templates.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400">No templates yet. Create a todo and click &quot;Save as Template&quot;.</p>}
+        <ul className="space-y-3 max-h-96 overflow-y-auto">
+          {templates.map((t) => (
+            <li key={t.id} className="border dark:border-gray-600 rounded-lg p-3 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-gray-800 dark:text-white">{t.name}</span>
+                {t.category && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">{t.category}</span>}
+              </div>
+              {t.description && <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>}
+              <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t.title_template}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                  t.priority === 'high' ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700' :
+                  t.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-700' :
+                  'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700'}`}>{t.priority}</span>
+                {t.is_recurring === 1 && t.recurrence_pattern && <span className="text-xs text-purple-600 dark:text-purple-400">🔄 {t.recurrence_pattern}</span>}
+                {t.reminder_minutes && <span className="text-xs text-orange-600 dark:text-orange-400">🔔</span>}
+              </div>
+              <div className="flex gap-3 mt-2">
+                <button onClick={() => onUse(t.id)} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Use</button>
+                <button onClick={() => onDelete(t.id)} className="text-sm text-red-600 dark:text-red-400 hover:underline">Delete</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <button onClick={onClose} className="mt-4 text-sm text-gray-500 dark:text-gray-400">Close</button>
+      </div>
+    </div>
   );
 }
 
@@ -386,24 +472,29 @@ function ManageTagsModal({ tags, onClose, onCreate, onUpdate, onDelete }: Manage
 export default function HomePage() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<Priority>('medium');
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
   const [filterTagId, setFilterTagId] = useState<number | null>(null);
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [showManageTags, setShowManageTags] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
-    const [todosRes, tagsRes] = await Promise.all([
+    const [todosRes, tagsRes, templatesRes] = await Promise.all([
       fetch('/api/todos'),
       fetch('/api/tags'),
+      fetch('/api/templates'),
     ]);
     if (todosRes.ok) setTodos(await todosRes.json());
     if (tagsRes.ok) setTags(await tagsRes.json());
+    if (templatesRes.ok) setTemplates(await templatesRes.json());
     setLoading(false);
   }, []);
 
@@ -463,6 +554,19 @@ export default function HomePage() {
     // Refresh todos so deleted tag pills disappear
     const todosRes = await fetch('/api/todos');
     if (todosRes.ok) setTodos(await todosRes.json());
+  };
+
+  // ── Template handlers ──────────────────────────────────────────────────────
+
+  const handleUseTemplate = async (id: number) => {
+    const res = await fetch(`/api/templates/${id}/use`, { method: 'POST' });
+    if (res.ok) await fetchData();
+  };
+
+  const handleDeleteTemplate = async (id: number) => {
+    if (!confirm('Delete this template?')) return;
+    await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
   };
 
   // ── Todo creation ──────────────────────────────────────────────────────────
@@ -556,12 +660,14 @@ export default function HomePage() {
     <main className="max-w-2xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Todos</h1>
-        <button
-          onClick={() => setShowManageTags(true)}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-        >
-          + Manage Tags
-        </button>
+        <div className="flex gap-3">
+          <button onClick={() => setShowTemplateManager(true)} className="text-sm text-purple-600 dark:text-purple-400 hover:underline">
+            📋 Templates
+          </button>
+          <button onClick={() => setShowManageTags(true)} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+            + Manage Tags
+          </button>
+        </div>
       </div>
 
       {/* ── New todo form ────────────────────────────────────────────────── */}
@@ -595,15 +701,33 @@ export default function HomePage() {
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {tags.map((tag) => (
-              <TagPill
-                key={tag.id}
-                tag={tag}
-                selected={selectedTagIds.has(tag.id)}
-                onClick={toggleTagSelection}
-              />
+              <TagPill key={tag.id} tag={tag} selected={selectedTagIds.has(tag.id)} onClick={toggleTagSelection} />
             ))}
           </div>
         )}
+
+        {/* Use Template / Save as Template row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {templates.length > 0 && (
+            <select
+              onChange={(e) => { if (e.target.value) { handleUseTemplate(Number(e.target.value)); e.target.value = ''; } }}
+              defaultValue=""
+              className="text-sm border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            >
+              <option value="" disabled>Use Template…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}{t.category ? ` (${t.category})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          {newTitle.trim() && (
+            <button type="button" onClick={() => setShowSaveTemplate(true)} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+              💾 Save as Template
+            </button>
+          )}
+        </div>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </form>
@@ -726,6 +850,29 @@ export default function HomePage() {
           onCreate={handleCreateTag}
           onUpdate={handleUpdateTag}
           onDelete={handleDeleteTag}
+        />
+      )}
+
+      {/* ── Save Template modal ───────────────────────────────────────────── */}
+      {showSaveTemplate && (
+        <SaveTemplateModal
+          title={newTitle}
+          priority={newPriority}
+          onClose={() => setShowSaveTemplate(false)}
+          onSaved={(t) => {
+            setTemplates((prev) => [...prev, t].sort((a, b) => a.name.localeCompare(b.name)));
+            setShowSaveTemplate(false);
+          }}
+        />
+      )}
+
+      {/* ── Template Manager modal ────────────────────────────────────────── */}
+      {showTemplateManager && (
+        <TemplateManagerModal
+          templates={templates}
+          onClose={() => setShowTemplateManager(false)}
+          onUse={async (id) => { await handleUseTemplate(id); setShowTemplateManager(false); }}
+          onDelete={handleDeleteTemplate}
         />
       )}
     </main>

@@ -72,12 +72,15 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    title TEXT NOT NULL,
+    description TEXT,
+    category TEXT,
+    title_template TEXT NOT NULL,
     priority TEXT NOT NULL DEFAULT 'medium',
-    due_offset_days INTEGER,
-    recurrence TEXT,
+    is_recurring INTEGER NOT NULL DEFAULT 0,
+    recurrence_pattern TEXT,
     reminder_minutes INTEGER,
-    subtasks TEXT NOT NULL DEFAULT '[]',
+    due_date_offset_minutes INTEGER,
+    subtasks_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -180,13 +183,35 @@ export interface Template {
   id: number;
   user_id: number;
   name: string;
-  title: string;
+  description: string | null;
+  category: string | null;
+  title_template: string;
   priority: Priority;
-  due_offset_days: number | null;
-  recurrence: RecurrencePattern | null;
+  is_recurring: number;
+  recurrence_pattern: RecurrencePattern | null;
   reminder_minutes: number | null;
-  subtasks: string;
+  due_date_offset_minutes: number | null;
+  subtasks_json: string | null;
   created_at: string;
+}
+
+export interface TemplateSubtask {
+  title: string;
+  position: number;
+}
+
+export interface CreateTemplateInput {
+  user_id: number;
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  title_template: string;
+  priority: Priority;
+  is_recurring?: boolean;
+  recurrence_pattern?: RecurrencePattern | null;
+  reminder_minutes?: number | null;
+  due_date_offset_minutes?: number | null;
+  subtasks_json?: string | null;
 }
 
 // ─── User DB ─────────────────────────────────────────────────────────────────
@@ -484,6 +509,109 @@ export const tagDB = {
     if (!tag) throw new Error('Tag not found');
 
     db.prepare('DELETE FROM todo_tags WHERE todo_id = ? AND tag_id = ?').run(todoId, tagId);
+  },
+};
+
+// ─── Templates migration (old schema → PRP-07 schema) ────────────────────────
+// If the table was created with the old column names, recreate it.
+try {
+  db.exec('SELECT title_template FROM templates LIMIT 1');
+} catch {
+  db.exec(`
+    DROP TABLE IF EXISTS templates;
+    CREATE TABLE templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      title_template TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      is_recurring INTEGER NOT NULL DEFAULT 0,
+      recurrence_pattern TEXT,
+      reminder_minutes INTEGER,
+      due_date_offset_minutes INTEGER,
+      subtasks_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_templates_user_id ON templates(user_id);
+  `);
+}
+
+// ─── Template DB ──────────────────────────────────────────────────────────────
+
+export const templateDB = {
+  findAllByUser(userId: number): Template[] {
+    return db
+      .prepare('SELECT * FROM templates WHERE user_id = ? ORDER BY name')
+      .all(userId) as unknown[] as Template[];
+  },
+
+  findById(id: number): Template | undefined {
+    return db
+      .prepare('SELECT * FROM templates WHERE id = ?')
+      .get(id) as unknown as Template | undefined;
+  },
+
+  create(input: CreateTemplateInput): Template {
+    return db
+      .prepare(`
+        INSERT INTO templates
+          (user_id, name, description, category, title_template, priority,
+           is_recurring, recurrence_pattern, reminder_minutes,
+           due_date_offset_minutes, subtasks_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING *
+      `)
+      .get(
+        input.user_id,
+        input.name.trim(),
+        input.description ?? null,
+        input.category ?? null,
+        input.title_template.trim(),
+        input.priority ?? 'medium',
+        input.is_recurring ? 1 : 0,
+        input.recurrence_pattern ?? null,
+        input.reminder_minutes ?? null,
+        input.due_date_offset_minutes ?? null,
+        input.subtasks_json ?? null,
+      ) as unknown as Template;
+  },
+
+  update(id: number, userId: number, input: Partial<CreateTemplateInput>): Template | undefined {
+    const current = db
+      .prepare('SELECT * FROM templates WHERE id = ? AND user_id = ?')
+      .get(id, userId) as unknown as Template | undefined;
+    if (!current) return undefined;
+
+    db.prepare(`
+      UPDATE templates
+      SET name = ?, description = ?, category = ?, title_template = ?,
+          priority = ?, is_recurring = ?, recurrence_pattern = ?,
+          reminder_minutes = ?, due_date_offset_minutes = ?, subtasks_json = ?
+      WHERE id = ? AND user_id = ?
+    `).run(
+      input.name?.trim() ?? current.name,
+      input.description !== undefined ? input.description : current.description,
+      input.category !== undefined ? input.category : current.category,
+      input.title_template?.trim() ?? current.title_template,
+      input.priority ?? current.priority,
+      input.is_recurring !== undefined ? (input.is_recurring ? 1 : 0) : current.is_recurring,
+      input.recurrence_pattern !== undefined ? input.recurrence_pattern : current.recurrence_pattern,
+      input.reminder_minutes !== undefined ? input.reminder_minutes : current.reminder_minutes,
+      input.due_date_offset_minutes !== undefined ? input.due_date_offset_minutes : current.due_date_offset_minutes,
+      input.subtasks_json !== undefined ? input.subtasks_json : current.subtasks_json,
+      id,
+      userId,
+    );
+    return this.findById(id);
+  },
+
+  delete(id: number, userId: number): boolean {
+    const result = db
+      .prepare('DELETE FROM templates WHERE id = ? AND user_id = ?')
+      .run(id, userId);
+    return (result.changes as number) > 0;
   },
 };
 
