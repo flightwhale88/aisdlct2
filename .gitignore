@@ -1,0 +1,6 @@
+.next
+node_modules
+todos.db
+todos.db-shm
+todos.db-wal
+*.env.local
