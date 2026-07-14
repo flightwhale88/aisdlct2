@@ -115,6 +115,7 @@ vi.mock('@/lib/db', () => {
         is_recurring: boolean;
         recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
         reminder_minutes: number | null;
+        tags?: string[];
       }>,
     ): Todo {
       const index = store.todos.findIndex((item) => item.id === id);
@@ -192,15 +193,15 @@ import { POST } from '@/app/api/todos/route';
 import { PUT } from '@/app/api/todos/[id]/route';
 import { resetTestDatabase, seedTestUser, TEST_USER_ID } from './helpers';
 
-function makeJsonRequest(url: string, method: string, body: unknown): Request {
+function makeJsonRequest(url: string, method: string, body: unknown): never {
   return new Request(url, {
     method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }) as never;
 }
 
-function makeTodoRequest(body: unknown): Request {
+function makeTodoRequest(body: unknown): never {
   return makeJsonRequest('http://localhost/api/todos', 'POST', body);
 }
 
@@ -361,6 +362,7 @@ describe('PUT /api/todos/[id] recurring completion', () => {
     expect(payload.todo.is_recurring).toBe(false);
     expect(payload.todo.recurrence_pattern).toBeNull();
     expect(todoDB.findById(created.id)?.recurrence_pattern).toBeNull();
-    expect(db.prepare('SELECT COUNT(*) AS count FROM todos').get<{ count: number }>().count).toBe(1);
+    const countRow = db.prepare('SELECT COUNT(*) AS count FROM todos').get() as { count: number };
+    expect(countRow.count).toBe(1);
   });
 });

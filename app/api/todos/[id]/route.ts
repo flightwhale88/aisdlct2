@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
 import { todoDB, type Priority, type RecurrencePattern } from '@/lib/db';
+import { isReminderMinutes } from '@/lib/reminders';
 import { calculateNextDueDate } from '@/lib/recurrence';
 import { getSingaporeNow, isAtLeastOneMinuteAhead, parseSingaporeDateTime } from '@/lib/timezone';
 
@@ -15,6 +16,10 @@ function isRecurrencePattern(value: unknown): value is RecurrencePattern {
 
 function isTagArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isIsoStringOrNull(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
 }
 
 function readBody(request: NextRequest): Promise<Record<string, unknown>> {
@@ -116,6 +121,14 @@ export async function PUT(
     return NextResponse.json({ error: 'tags must be an array of strings' }, { status: 400 });
   }
 
+  if (body.reminder_minutes !== undefined && body.reminder_minutes !== null && !isReminderMinutes(body.reminder_minutes)) {
+    return NextResponse.json({ error: 'Invalid reminder minutes' }, { status: 400 });
+  }
+
+  if (body.last_notification_sent !== undefined && !isIsoStringOrNull(body.last_notification_sent)) {
+    return NextResponse.json({ error: 'last_notification_sent must be a string or null' }, { status: 400 });
+  }
+
   const effectiveDueDate =
     typeof body.due_date === 'string'
       ? body.due_date.trim()
@@ -149,7 +162,13 @@ export async function PUT(
         : isRecurrencePattern(body.recurrence_pattern)
           ? body.recurrence_pattern
           : undefined,
-    reminder_minutes: typeof body.reminder_minutes === 'number' ? body.reminder_minutes : undefined,
+    reminder_minutes: isReminderMinutes(body.reminder_minutes) ? body.reminder_minutes : undefined,
+    last_notification_sent:
+      body.due_date !== undefined || body.reminder_minutes !== undefined
+        ? null
+        : isIsoStringOrNull(body.last_notification_sent)
+          ? body.last_notification_sent
+          : undefined,
     tags: isTagArray(body.tags) ? body.tags : undefined,
   });
 
@@ -167,6 +186,7 @@ export async function PUT(
       recurrence_pattern: updated.recurrence_pattern,
       reminder_minutes: updated.reminder_minutes,
       tags: updated.tags,
+      last_notification_sent: null,
     });
   }
 

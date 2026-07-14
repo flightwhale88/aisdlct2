@@ -40,7 +40,8 @@ export async function getSession(): Promise<Session | null> {
     return testSession;
   }
 
-  const cookieValue = cookies().get(SESSION_COOKIE_NAME)?.value;
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!cookieValue) {
     return null;
   }

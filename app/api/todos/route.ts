@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
 import { todoDB, type Priority, type RecurrencePattern } from '@/lib/db';
+import { isReminderMinutes } from '@/lib/reminders';
 import { getSingaporeNow, isAtLeastOneMinuteAhead, parseSingaporeDateTime } from '@/lib/timezone';
 
 function isPriority(value: unknown): value is Priority {
@@ -75,6 +76,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'tags must be an array of strings' }, { status: 400 });
   }
 
+  if (body.reminder_minutes !== undefined && body.reminder_minutes !== null && !isReminderMinutes(body.reminder_minutes)) {
+    return NextResponse.json({ error: 'Invalid reminder minutes' }, { status: 400 });
+  }
+
   if (dueDate !== null && !isAtLeastOneMinuteAhead(dueDate, getSingaporeNow())) {
     return NextResponse.json({ error: 'Due date must be at least 1 minute in the future' }, { status: 400 });
   }
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     priority: isPriority(body.priority) ? body.priority : 'medium',
     is_recurring: isRecurring,
     recurrence_pattern: isRecurring ? recurrencePattern : null,
-    reminder_minutes: typeof body.reminder_minutes === 'number' ? body.reminder_minutes : null,
+    reminder_minutes: isReminderMinutes(body.reminder_minutes) ? body.reminder_minutes : null,
     tags: isTagArray(body.tags) ? body.tags : undefined,
   });
 

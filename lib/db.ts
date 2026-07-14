@@ -4,6 +4,17 @@ import { formatSingaporeDateTime, getSingaporeNow } from '@/lib/timezone';
 
 export type Priority = 'high' | 'medium' | 'low';
 export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type ReminderMinutes = 15 | 30 | 60 | 120 | 1440 | 2880 | 10080;
+
+export const REMINDER_LABELS: Record<ReminderMinutes, string> = {
+  15: '15m',
+  30: '30m',
+  60: '1h',
+  120: '2h',
+  1440: '1d',
+  2880: '2d',
+  10080: '1w',
+};
 
 export interface Subtask {
   id: number;
@@ -39,6 +50,7 @@ export interface CreateTodoInput {
   is_recurring?: boolean;
   recurrence_pattern?: RecurrencePattern | null;
   reminder_minutes?: number | null;
+  last_notification_sent?: string | null;
   tags?: string[];
   completed?: boolean;
 }
@@ -169,6 +181,7 @@ function parseTags(value: string | null): string[] {
 function buildUpdateParts(input: UpdateTodoInput): { clause: string; values: unknown[] } {
   const parts: string[] = [];
   const values: unknown[] = [];
+  const shouldResetNotification = input.due_date !== undefined || input.reminder_minutes !== undefined;
 
   if (input.title !== undefined) {
     parts.push('title = ?');
@@ -203,6 +216,14 @@ function buildUpdateParts(input: UpdateTodoInput): { clause: string; values: unk
   if (input.reminder_minutes !== undefined) {
     parts.push('reminder_minutes = ?');
     values.push(input.reminder_minutes);
+  }
+
+  if (shouldResetNotification) {
+    parts.push('last_notification_sent = ?');
+    values.push(null);
+  } else if (input.last_notification_sent !== undefined) {
+    parts.push('last_notification_sent = ?');
+    values.push(input.last_notification_sent);
   }
 
   if (input.tags !== undefined) {
@@ -326,7 +347,7 @@ export const todoDB = {
         input.recurrence_pattern ?? null,
         input.reminder_minutes ?? null,
         JSON.stringify(input.tags ?? []),
-        null,
+        input.last_notification_sent ?? null,
         createdAt,
         null,
       );

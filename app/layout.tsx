@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: 'Next.js todo scaffold for PRP-driven development',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }): JSX.Element {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>{children}</body>
