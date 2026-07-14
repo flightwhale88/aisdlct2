@@ -12,6 +12,32 @@ export interface SessionPayload {
   username: string;
 }
 
+// ─── Challenge Storage (In-memory, single-instance) ────────────────────────
+
+const challengeStore = new Map<string, { challenge: string; expiresAt: number }>();
+
+export function generateChallenge(): string {
+  return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
+}
+
+export async function saveChallenge(username: string, challenge: string): Promise<void> {
+  challengeStore.set(username, {
+    challenge,
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+export async function getChallenge(username: string): Promise<string | null> {
+  const stored = challengeStore.get(username);
+  if (!stored) return null;
+  if (Date.now() > stored.expiresAt) {
+    challengeStore.delete(username);
+    return null;
+  }
+  challengeStore.delete(username); // Single-use
+  return stored.challenge;
+}
+
 export async function createSession(payload: SessionPayload): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })

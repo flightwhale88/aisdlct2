@@ -727,6 +727,15 @@ export default function HomePage() {
     );
   }
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
@@ -739,6 +748,9 @@ export default function HomePage() {
           </button>
           <button onClick={() => setShowManageTags(true)} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
             + Manage Tags
+          </button>
+          <button onClick={handleLogout} className="text-sm text-red-600 dark:text-red-400 hover:underline">
+            🚪 Logout
           </button>
         </div>
       </div>
