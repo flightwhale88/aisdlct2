@@ -36,9 +36,17 @@ export class TestHelpers {
   }
 
   /**
-   * Adds a subtask to an existing todo (stub — implement when subtask UI is added).
+   * Adds a subtask to an existing todo by expanding its subtask section.
+   * The todo must already be visible on the page.
    */
-  async addSubtask(_todoTitle: string, _subtaskTitle: string): Promise<void> {
-    // TODO: implement when subtask expand/collapse UI is wired up
+  async addSubtask(todoTitle: string, subtaskTitle: string): Promise<void> {
+    const todoItem = this.page.locator('li', { hasText: todoTitle });
+    const expandBtn = todoItem.locator('text=▶ Subtasks');
+    if (await expandBtn.isVisible()) {
+      await expandBtn.click();
+    }
+    await todoItem.locator('input[placeholder="Add subtask…"]').fill(subtaskTitle);
+    await todoItem.locator('button', { hasText: 'Add' }).click();
+    await todoItem.locator(`text=${subtaskTitle}`).waitFor({ state: 'visible' });
   }
 }

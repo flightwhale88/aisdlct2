@@ -1,7 +1,128 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Tag, Todo, CreateTagInput, UpdateTagInput } from '@/lib/db';
+import type { Tag, Todo, Subtask, CreateTagInput, UpdateTagInput } from '@/lib/db';
+
+// ─── Progress helpers ─────────────────────────────────────────────────────────
+
+function calculateProgress(subtasks: Subtask[]) {
+  const total = subtasks.length;
+  const completed = subtasks.filter((s) => s.completed).length;
+  const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+  return { completed, total, percent };
+}
+
+function ProgressBar({ subtasks }: { subtasks: Subtask[] }) {
+  const { completed, total, percent } = calculateProgress(subtasks);
+  if (total === 0) return null;
+  return (
+    <div className="mt-1">
+      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+        <span>{completed}/{total} subtasks</span>
+        <span>{percent}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all duration-200 ${percent === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SubtaskList({ todoId, subtasks, onChange }: {
+  todoId: number;
+  subtasks: Subtask[];
+  onChange: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+
+  const addSubtask = async () => {
+    const title = newTitle.trim();
+    if (!title) return;
+    await fetch(`/api/todos/${todoId}/subtasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    setNewTitle('');
+    onChange();
+  };
+
+  const toggleSubtask = async (subtask: Subtask) => {
+    await fetch(`/api/subtasks/${subtask.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ completed: !subtask.completed }),
+    });
+    onChange();
+  };
+
+  const deleteSubtask = async (id: number) => {
+    await fetch(`/api/subtasks/${id}`, { method: 'DELETE' });
+    onChange();
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        {expanded ? '▼' : '▶'} Subtasks
+      </button>
+
+      <ProgressBar subtasks={subtasks} />
+
+      {expanded && (
+        <div className="mt-2 space-y-1 pl-3 border-l-2 border-gray-200 dark:border-gray-600">
+          {subtasks.map((s) => (
+            <div key={s.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(s.completed)}
+                onChange={() => toggleSubtask(s)}
+                className="h-3.5 w-3.5 rounded"
+              />
+              <span className={`flex-1 text-sm ${s.completed ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                {s.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => deleteSubtask(s.id)}
+                className="text-gray-300 hover:text-red-500 dark:hover:text-red-400 text-xs leading-none"
+                aria-label="Delete subtask"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-2">
+            <input
+              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addSubtask()}
+              placeholder="Add subtask…"
+              className="flex-1 border rounded px-2 py-0.5 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+            <button
+              type="button"
+              onClick={addSubtask}
+              disabled={!newTitle.trim()}
+              className="text-sm text-blue-600 dark:text-blue-400 disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── TagPill component ────────────────────────────────────────────────────────
 
@@ -500,6 +621,12 @@ export default function HomePage() {
                   ))}
                 </div>
               )}
+              {/* Subtasks */}
+              <SubtaskList
+                todoId={todo.id}
+                subtasks={todo.subtasks ?? []}
+                onChange={fetchData}
+              />
             </div>
             <button
               onClick={() => handleDeleteTodo(todo.id)}

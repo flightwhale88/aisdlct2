@@ -352,6 +352,12 @@ export const todoDB = {
 // ─── Subtask DB ──────────────────────────────────────────────────────────────
 
 export const subtaskDB = {
+  findById(id: number): Subtask | undefined {
+    return db
+      .prepare('SELECT * FROM subtasks WHERE id = ?')
+      .get(id) as unknown as Subtask | undefined;
+  },
+
   findByTodoId(todoId: number): Subtask[] {
     return db
       .prepare('SELECT * FROM subtasks WHERE todo_id = ? ORDER BY position, created_at')
