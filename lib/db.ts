@@ -386,6 +386,71 @@ export const todoDB = {
       .run(id, userId);
     return result.changes > 0;
   },
+
+  importAll(
+    userId: number,
+    items: Array<{
+      title: string;
+      completed: boolean;
+      due_date: string | null;
+      priority: string;
+      is_recurring?: boolean;
+      recurrence_pattern: string | null;
+      reminder_minutes: number | null;
+      created_at: string;
+      subtasks: Array<{ title: string; completed: boolean; position: number }>;
+      tags: Array<{ name: string; color: string }>;
+    }>,
+  ): { imported: number; tagsCreated: number; tagsReused: number } {
+    let tagsCreated = 0;
+    let tagsReused = 0;
+
+    const insertTodo = db.prepare(`
+      INSERT INTO todos (user_id, title, completed, due_date, priority, recurrence, reminder_minutes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `);
+    const insertSubtask = db.prepare(
+      'INSERT INTO subtasks (todo_id, title, completed, position) VALUES (?, ?, ?, ?)',
+    );
+    const findTag = db.prepare('SELECT id FROM tags WHERE user_id = ? AND LOWER(name) = LOWER(?)');
+    const insertTag = db.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?) RETURNING id');
+    const linkTag = db.prepare('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)');
+
+    db.exec('BEGIN');
+    try {
+      for (const item of items) {
+        const todoResult = insertTodo.run(
+          userId, item.title, item.completed ? 1 : 0, item.due_date ?? null,
+          item.priority, item.recurrence_pattern ?? null, item.reminder_minutes ?? null, item.created_at,
+        );
+        const todoId = todoResult.lastInsertRowid as number;
+
+        item.subtasks.forEach((s, i) => {
+          insertSubtask.run(todoId, s.title, s.completed ? 1 : 0, s.position ?? i);
+        });
+
+        for (const tag of item.tags) {
+          const existing = findTag.get(userId, tag.name) as { id: number } | undefined;
+          let tagId: number;
+          if (existing) {
+            tagsReused++;
+            tagId = existing.id;
+          } else {
+            tagsCreated++;
+            const row = insertTag.get(userId, tag.name, tag.color) as unknown as { id: number };
+            tagId = row.id;
+          }
+          linkTag.run(todoId, tagId);
+        }
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+
+    return { imported: items.length, tagsCreated, tagsReused };
+  },
 };
 
 // ─── Subtask DB ──────────────────────────────────────────────────────────────

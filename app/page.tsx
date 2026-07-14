@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Tag, Todo, Subtask, Priority, Template, CreateTagInput, UpdateTagInput } from '@/lib/db';
 
 // ─── Priority helpers ─────────────────────────────────────────────────────────
@@ -187,6 +187,76 @@ function TagPill({ tag, selected = false, onClick, onFilterClick }: TagPillProps
       {selected && <span aria-hidden>✓</span>}
       <span className="truncate max-w-[10rem]">{tag.name}</span>
     </button>
+  );
+}
+
+// ─── Export / Import toolbar ──────────────────────────────────────────────────
+
+function ExportImportToolbar({ onImported }: { onImported: () => void }) {
+  const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const download = (format: 'json' | 'csv') => {
+    window.location.href = `/api/todos/export?format=${format}`;
+  };
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setMessage(null);
+    try {
+      const text = await file.text();
+      const body = JSON.parse(text);
+      const res = await fetch('/api/todos/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to import todos');
+      setMessage({ type: 'success', text: `Successfully imported ${data.imported} todos` });
+      onImported();
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err instanceof SyntaxError ? 'Invalid JSON format' : (err as Error).message,
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2 items-center">
+      <button
+        onClick={() => download('json')}
+        className="text-xs bg-green-600 hover:bg-green-700 text-white rounded px-2 py-1"
+      >
+        Export JSON
+      </button>
+      <button
+        onClick={() => download('csv')}
+        className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded px-2 py-1"
+      >
+        Export CSV
+      </button>
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={importing}
+        className="text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded px-2 py-1"
+      >
+        {importing ? 'Importing…' : 'Import'}
+      </button>
+      <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleFile} />
+      {message && (
+        <span className={`text-xs ${message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+          {message.text}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -660,7 +730,8 @@ export default function HomePage() {
     <main className="max-w-2xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Todos</h1>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <ExportImportToolbar onImported={fetchData} />
           <button onClick={() => setShowTemplateManager(true)} className="text-sm text-purple-600 dark:text-purple-400 hover:underline">
             📋 Templates
           </button>
