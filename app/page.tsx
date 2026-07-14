@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import type { Tag, Todo, Subtask, Priority, Template, CreateTagInput, UpdateTagInput } from '@/lib/db';
 
 // ─── Priority helpers ─────────────────────────────────────────────────────────
@@ -731,6 +732,7 @@ export default function HomePage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Todos</h1>
         <div className="flex flex-wrap gap-3 items-center">
+          <Link href="/calendar" className="text-sm text-purple-600 dark:text-purple-400 hover:underline">📅 Calendar</Link>
           <ExportImportToolbar onImported={fetchData} />
           <button onClick={() => setShowTemplateManager(true)} className="text-sm text-purple-600 dark:text-purple-400 hover:underline">
             📋 Templates

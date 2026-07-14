@@ -195,6 +195,13 @@ export interface Template {
   created_at: string;
 }
 
+export interface Holiday {
+  id: number;
+  date: string; // YYYY-MM-DD
+  name: string;
+  created_at: string;
+}
+
 export interface TemplateSubtask {
   title: string;
   position: number;
@@ -677,6 +684,34 @@ export const templateDB = {
       .prepare('DELETE FROM templates WHERE id = ? AND user_id = ?')
       .run(id, userId);
     return (result.changes as number) > 0;
+  },
+};
+
+// ─── Holiday DB ───────────────────────────────────────────────────────────────
+
+export const holidayDB = {
+  findAll(): Holiday[] {
+    return db.prepare('SELECT * FROM holidays ORDER BY date').all() as unknown[] as Holiday[];
+  },
+
+  findByMonth(year: number, month: number): Holiday[] {
+    // Include a few days padding for leading/trailing grid cells
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const padded = new Date(Date.UTC(year, month, 10)); // next month + 10 days
+    const end = padded.toISOString().slice(0, 10);
+    return db
+      .prepare('SELECT * FROM holidays WHERE date >= ? AND date <= ? ORDER BY date')
+      .all(
+        // Go back 7 days from start for leading cells
+        new Date(Date.UTC(year, month - 1, -6)).toISOString().slice(0, 10),
+        end,
+      ) as unknown[] as Holiday[];
+  },
+
+  upsert(date: string, name: string): void {
+    db.prepare(
+      'INSERT INTO holidays (date, name) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET name = excluded.name',
+    ).run(date, name);
   },
 };
 
