@@ -12,6 +12,10 @@ function isRecurrencePattern(value: unknown): value is RecurrencePattern {
   return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'yearly';
 }
 
+function isTagArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
 function readBody(request: NextRequest): Promise<Record<string, unknown>> {
   return request.json() as Promise<Record<string, unknown>>;
 }
@@ -51,6 +55,26 @@ export async function POST(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'Due date is invalid' }, { status: 400 });
   }
 
+  const isRecurring = body.is_recurring === true;
+  const recurrencePatternProvided = body.recurrence_pattern !== undefined;
+  const recurrencePattern = isRecurrencePattern(body.recurrence_pattern) ? body.recurrence_pattern : null;
+
+  if (recurrencePatternProvided && body.recurrence_pattern !== null && recurrencePattern === null) {
+    return NextResponse.json({ error: 'Invalid recurrence pattern' }, { status: 400 });
+  }
+
+  if (isRecurring && dueDate === null) {
+    return NextResponse.json({ error: 'Recurring todos require a due date' }, { status: 400 });
+  }
+
+  if (isRecurring && recurrencePattern === null) {
+    return NextResponse.json({ error: 'Invalid recurrence pattern' }, { status: 400 });
+  }
+
+  if (body.tags !== undefined && !isTagArray(body.tags)) {
+    return NextResponse.json({ error: 'tags must be an array of strings' }, { status: 400 });
+  }
+
   if (dueDate !== null && !isAtLeastOneMinuteAhead(dueDate, getSingaporeNow())) {
     return NextResponse.json({ error: 'Due date must be at least 1 minute in the future' }, { status: 400 });
   }
@@ -60,9 +84,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     title,
     due_date: dueDate,
     priority: isPriority(body.priority) ? body.priority : 'medium',
-    is_recurring: typeof body.is_recurring === 'boolean' ? body.is_recurring : false,
-    recurrence_pattern: isRecurrencePattern(body.recurrence_pattern) ? body.recurrence_pattern : null,
+    is_recurring: isRecurring,
+    recurrence_pattern: isRecurring ? recurrencePattern : null,
     reminder_minutes: typeof body.reminder_minutes === 'number' ? body.reminder_minutes : null,
+    tags: isTagArray(body.tags) ? body.tags : undefined,
   });
 
   return NextResponse.json(todo, { status: 201 });

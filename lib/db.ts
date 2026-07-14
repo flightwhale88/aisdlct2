@@ -24,6 +24,7 @@ export interface Todo {
   is_recurring: boolean;
   recurrence_pattern: RecurrencePattern | null;
   reminder_minutes: number | null;
+  tags: string[];
   last_notification_sent: string | null;
   created_at: string;
   updated_at: string | null;
@@ -38,6 +39,7 @@ export interface CreateTodoInput {
   is_recurring?: boolean;
   recurrence_pattern?: RecurrencePattern | null;
   reminder_minutes?: number | null;
+  tags?: string[];
   completed?: boolean;
 }
 
@@ -64,6 +66,7 @@ interface TodoRow {
   is_recurring: number;
   recurrence_pattern: RecurrencePattern | null;
   reminder_minutes: number | null;
+  tags: string;
   last_notification_sent: string | null;
   created_at: string;
   updated_at: string | null;
@@ -99,6 +102,7 @@ db.exec(`
     is_recurring INTEGER NOT NULL DEFAULT 0,
     recurrence_pattern TEXT,
     reminder_minutes INTEGER,
+    tags TEXT NOT NULL DEFAULT '[]',
     last_notification_sent TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT
@@ -141,11 +145,25 @@ function rowToTodo(row: TodoRow): Todo {
     is_recurring: row.is_recurring === 1,
     recurrence_pattern: row.recurrence_pattern,
     reminder_minutes: row.reminder_minutes,
+    tags: parseTags(row.tags),
     last_notification_sent: row.last_notification_sent,
     created_at: row.created_at,
     updated_at: row.updated_at,
     subtasks: subtaskDB.findByTodoId(row.id),
   };
+}
+
+function parseTags(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 function buildUpdateParts(input: UpdateTodoInput): { clause: string; values: unknown[] } {
@@ -185,6 +203,11 @@ function buildUpdateParts(input: UpdateTodoInput): { clause: string; values: unk
   if (input.reminder_minutes !== undefined) {
     parts.push('reminder_minutes = ?');
     values.push(input.reminder_minutes);
+  }
+
+  if (input.tags !== undefined) {
+    parts.push('tags = ?');
+    values.push(JSON.stringify(input.tags));
   }
 
   parts.push('updated_at = ?');
@@ -287,10 +310,11 @@ export const todoDB = {
           is_recurring,
           recurrence_pattern,
           reminder_minutes,
+          tags,
           last_notification_sent,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.user_id,
@@ -301,6 +325,7 @@ export const todoDB = {
         input.is_recurring ? 1 : 0,
         input.recurrence_pattern ?? null,
         input.reminder_minutes ?? null,
+        JSON.stringify(input.tags ?? []),
         null,
         createdAt,
         null,

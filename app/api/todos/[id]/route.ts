@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
 import { todoDB, type Priority, type RecurrencePattern } from '@/lib/db';
+import { calculateNextDueDate } from '@/lib/recurrence';
 import { getSingaporeNow, isAtLeastOneMinuteAhead, parseSingaporeDateTime } from '@/lib/timezone';
 
 function isPriority(value: unknown): value is Priority {
@@ -10,6 +11,10 @@ function isPriority(value: unknown): value is Priority {
 
 function isRecurrencePattern(value: unknown): value is RecurrencePattern {
   return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'yearly';
+}
+
+function isTagArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
 function readBody(request: NextRequest): Promise<Record<string, unknown>> {
@@ -28,6 +33,17 @@ async function getOwnedTodo(todoId: number, userId: number) {
   }
 
   return todo;
+}
+
+function resolveRecurringState(existing: Awaited<ReturnType<typeof getOwnedTodo>>, body: Record<string, unknown>) {
+  const isRecurring = typeof body.is_recurring === 'boolean' ? body.is_recurring : existing?.is_recurring ?? false;
+  const recurrencePattern = isRecurrencePattern(body.recurrence_pattern)
+    ? body.recurrence_pattern
+    : typeof body.is_recurring === 'boolean' && body.is_recurring === false
+      ? null
+      : existing?.recurrence_pattern ?? null;
+
+  return { isRecurring, recurrencePattern };
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
@@ -92,6 +108,30 @@ export async function PUT(
     }
   }
 
+  if (body.recurrence_pattern !== undefined && body.recurrence_pattern !== null && !isRecurrencePattern(body.recurrence_pattern)) {
+    return NextResponse.json({ error: 'Invalid recurrence pattern' }, { status: 400 });
+  }
+
+  if (body.tags !== undefined && !isTagArray(body.tags)) {
+    return NextResponse.json({ error: 'tags must be an array of strings' }, { status: 400 });
+  }
+
+  const effectiveDueDate =
+    typeof body.due_date === 'string'
+      ? body.due_date.trim()
+      : body.due_date === null
+        ? null
+        : todo.due_date;
+  const { isRecurring, recurrencePattern } = resolveRecurringState(todo, body);
+
+  if (isRecurring && !effectiveDueDate) {
+    return NextResponse.json({ error: 'Recurring todos require a due date' }, { status: 400 });
+  }
+
+  if (isRecurring && recurrencePattern === null) {
+    return NextResponse.json({ error: 'Invalid recurrence pattern' }, { status: 400 });
+  }
+
   const updated = todoDB.update(todoId, {
     title: typeof body.title === 'string' ? body.title.trim() : undefined,
     completed: typeof body.completed === 'boolean' ? body.completed : undefined,
@@ -103,11 +143,34 @@ export async function PUT(
           : undefined,
     priority: isPriority(body.priority) ? body.priority : undefined,
     is_recurring: typeof body.is_recurring === 'boolean' ? body.is_recurring : undefined,
-    recurrence_pattern: isRecurrencePattern(body.recurrence_pattern) ? body.recurrence_pattern : undefined,
+    recurrence_pattern:
+      typeof body.is_recurring === 'boolean' && body.is_recurring === false
+        ? null
+        : isRecurrencePattern(body.recurrence_pattern)
+          ? body.recurrence_pattern
+          : undefined,
     reminder_minutes: typeof body.reminder_minutes === 'number' ? body.reminder_minutes : undefined,
+    tags: isTagArray(body.tags) ? body.tags : undefined,
   });
 
-  return NextResponse.json(updated);
+  const justCompleted = body.completed === true && todo.completed === false;
+  let nextInstance = null;
+
+  if (justCompleted && updated.is_recurring && updated.recurrence_pattern && updated.due_date) {
+    const nextDueDate = calculateNextDueDate(updated.due_date, updated.recurrence_pattern);
+    nextInstance = todoDB.create({
+      user_id: session.userId,
+      title: updated.title,
+      due_date: nextDueDate,
+      priority: updated.priority,
+      is_recurring: true,
+      recurrence_pattern: updated.recurrence_pattern,
+      reminder_minutes: updated.reminder_minutes,
+      tags: updated.tags,
+    });
+  }
+
+  return NextResponse.json(nextInstance ? { todo: updated, nextInstance } : { todo: updated });
 }
 
 export async function DELETE(
